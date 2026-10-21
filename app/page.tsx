@@ -9,6 +9,7 @@ import { InfoModal } from '@/components/dashboard/InfoModal';
 import { LOCATION_PRESETS } from '@/lib/constants';
 import { LocationCoords, MapLayerState } from '@/types';
 import { useAirQuality } from '@/hooks/useAirQuality';
+import { HotspotGeoJSON } from '@/lib/geo/hotspots';
 
 // Dynamically load MapLibre MapContainer with SSR disabled
 const MapContainer = dynamic(
@@ -46,6 +47,26 @@ export default function Home() {
   // Timeline state
   const [selectedHourOffset, setSelectedHourOffset] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [hotspotsData, setHotspotsData] = useState<HotspotGeoJSON | null>(null);
+
+  // Fetch hotspots data for intelligence analysis and geospatial mapping
+  useEffect(() => {
+    async function fetchHotspots() {
+      try {
+        const res = await fetch('/api/hotspots');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.geojson) {
+            setHotspotsData(json.geojson);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch hotspots feed in page:', err);
+      }
+    }
+
+    fetchHotspots();
+  }, []);
 
   // Auto-play timeline progression
   useEffect(() => {
@@ -125,6 +146,7 @@ export default function Home() {
             isLoading={isLoading}
             error={error}
             onRefresh={refetch}
+            hotspotsData={hotspotsData}
           />
         </div>
 
@@ -141,6 +163,7 @@ export default function Home() {
                 isLoading={isLoading}
                 error={error}
                 onRefresh={refetch}
+                hotspotsData={hotspotsData}
               />
             </div>
           </div>
@@ -153,6 +176,8 @@ export default function Home() {
             onSelectLocation={handleSelectLocation}
             layers={layers}
             onToggleLayer={handleToggleLayer}
+            selectedHourOffset={selectedHourOffset}
+            hotspotsData={hotspotsData}
           />
 
           {/* Bottom Floating Timeline Controls */}

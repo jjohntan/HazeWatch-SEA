@@ -15,6 +15,8 @@ import {
 import { LocationCoords, CurrentAirQuality, HourlyForecastItem } from '@/types';
 import { formatMalaysiaTime, getAqiCategory } from '@/lib/geo/aqi';
 import { ForecastChart } from '@/components/charts/ForecastChart';
+import { EnvironmentalIntelligenceCards } from './EnvironmentalIntelligenceCards';
+import { HotspotGeoJSON } from '@/lib/geo/hotspots';
 
 interface SidebarProps {
   currentLocation: LocationCoords;
@@ -26,6 +28,7 @@ interface SidebarProps {
   error?: string | null;
   onRefresh: () => void;
   className?: string;
+  hotspotsData?: HotspotGeoJSON | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   error = null,
   onRefresh,
   className = '',
+  hotspotsData = null,
 }) => {
   // Determine if viewing current conditions or a future forecast hour
   const isForecasting = selectedHourOffset > 0 && forecast[selectedHourOffset];
@@ -97,38 +101,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* Main AQI Status Card */}
-      <div className="glass-panel-subtle rounded-2xl p-4 mb-3 border border-white/5 relative overflow-hidden">
+      <div className="glass-panel-subtle rounded-2xl p-4 mb-3 border border-white/5 relative overflow-hidden flex-shrink-0">
         {/* Ambient background glow based on category color */}
         <div 
           className="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-25 pointer-events-none"
           style={{ backgroundColor: aqiInfo?.color || '#10b981' }}
         />
 
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-1.5">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
             <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">
               Air Quality Index
             </span>
             {isForecasting && (
-              <span className="text-[10px] font-mono bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded border border-cyan-500/30">
+              <span className="text-[10px] font-mono bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap">
                 +{selectedHourOffset}h FORECAST
               </span>
             )}
           </div>
-          <span className="text-[10px] font-medium bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded border border-white/10">
+          <span className="text-[10px] font-medium bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded border border-white/10 flex-shrink-0 whitespace-nowrap">
             US EPA Standard
           </span>
         </div>
 
-        <div className="flex items-baseline space-x-3 mb-2">
+        {/* AQI Score and Category Status */}
+        <div className="flex items-center justify-between gap-3 mb-3">
           <div 
-            className="text-4xl font-extrabold tracking-tight"
+            className="text-4xl sm:text-5xl font-black tracking-tight leading-none flex-shrink-0"
             style={{ color: aqiInfo?.color || '#10b981' }}
           >
             {displayAqi !== null ? Math.round(displayAqi) : '--'}
           </div>
-          <div className="text-sm font-semibold text-white">
-            {aqiInfo?.category || (isLoading ? 'Fetching live API...' : 'Unavailable')}
+          <div className="text-right min-w-0">
+            <div className="text-sm sm:text-base font-bold text-white leading-tight break-words">
+              {aqiInfo?.category || (isLoading ? 'Fetching live API...' : 'Unavailable')}
+            </div>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+              {displayAqi !== null ? `AQI Index Score` : 'Awaiting data'}
+            </div>
           </div>
         </div>
 
@@ -226,6 +236,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Public Health Guidance & Haze Source Intelligence */}
+      <EnvironmentalIntelligenceCards
+        currentLocation={currentLocation}
+        displayAqi={displayAqi}
+        displayPm25={displayPm25}
+        displayWindSpeed={displayWindSpeed}
+        displayWindDir={displayWindDir}
+        hotspotsData={hotspotsData}
+      />
 
       {/* 48-Hour Forecast Trend Chart */}
       <div className="mb-3">

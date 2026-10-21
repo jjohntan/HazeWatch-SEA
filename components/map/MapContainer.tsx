@@ -9,12 +9,15 @@ import { Legend } from '../dashboard/Legend';
 import { WindParticleEngine } from './WindParticleEngine';
 import { RegionalWindPoint } from '@/app/api/weather/route';
 import { HotspotGeoJSON, HotspotFeatureProperties } from '@/lib/geo/hotspots';
+import { AsmcDispersionGeoJSON, DispersionFeatureProperties } from '@/app/api/dispersion/route';
 
 interface MapContainerProps {
   currentLocation: LocationCoords;
   onSelectLocation: (loc: LocationCoords) => void;
   layers: MapLayerState;
   onToggleLayer: (layer: keyof MapLayerState) => void;
+  selectedHourOffset?: number;
+  hotspotsData?: HotspotGeoJSON | null;
 }
 
 export const MapContainer: React.FC<MapContainerProps> = ({
@@ -22,6 +25,8 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   onSelectLocation,
   layers,
   onToggleLayer,
+  selectedHourOffset = 0,
+  hotspotsData: externalHotspotsData,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +38,10 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const activePopupRef = useRef<maplibregl.Popup | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
-  const [hotspotsData, setHotspotsData] = useState<HotspotGeoJSON | null>(null);
+  const [internalHotspotsData, setInternalHotspotsData] = useState<HotspotGeoJSON | null>(null);
+  const [dispersionData, setDispersionData] = useState<AsmcDispersionGeoJSON | null>(null);
+
+  const effectiveHotspotsData = externalHotspotsData ?? internalHotspotsData;
 
   // Keep refs up to date
   useEffect(() => {
@@ -44,26 +52,30 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     layersWindRef.current = layers.wind;
   }, [layers.wind]);
 
-  // Fetch hotspots & regional wind grid
+  // Fetch hotspots (if not provided externally) & regional wind grid
   useEffect(() => {
     async function fetchLayerData() {
       try {
-        const [hotspotsRes, windRes] = await Promise.all([
-          fetch('/api/hotspots'),
-          fetch('/api/weather?grid=regional'),
-        ]);
-
-        if (hotspotsRes.ok) {
-          const json = await hotspotsRes.json();
-          if (json.geojson) {
-            setHotspotsData(json.geojson);
-          }
+        const promises: Promise<Response>[] = [fetch('/api/weather?grid=regional')];
+        if (!externalHotspotsData) {
+          promises.push(fetch('/api/hotspots'));
         }
 
-        if (windRes.ok) {
+        const results = await Promise.all(promises);
+        const windRes = results[0];
+        const hotspotsRes = results[1];
+
+        if (windRes && windRes.ok) {
           const windJson = await windRes.json();
           if (Array.isArray(windJson.grid) && windEngineRef.current) {
             windEngineRef.current.setGrid(windJson.grid as RegionalWindPoint[]);
+          }
+        }
+
+        if (hotspotsRes && hotspotsRes.ok) {
+          const json = await hotspotsRes.json();
+          if (json.geojson) {
+            setInternalHotspotsData(json.geojson);
           }
         }
       } catch (err) {
@@ -72,7 +84,31 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     }
 
     fetchLayerData();
-  }, []);
+  }, [externalHotspotsData]);
+
+  // Fetch ASMC smoke dispersion plumes based on current timeline hour offset
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchDispersion() {
+      try {
+        const res = await fetch(`/api/dispersion?hour=${selectedHourOffset}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (isMounted && json.geojson) {
+            setDispersionData(json.geojson);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load dispersion data:', err);
+      }
+    }
+
+    fetchDispersion();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedHourOffset]);
 
   // Initialize MapLibre GL JS
   useEffect(() => {
@@ -135,9 +171,9 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 
     // Click on map to select location
     map.on('click', (e) => {
-      // If clicking directly on a hotspot feature, ignore map-wide select
+      // If clicking directly on a hotspot or dispersion feature, ignore map-wide select
       const features = map.queryRenderedFeatures(e.point, {
-        layers: ['unclustered-hotspot-points', 'hotspot-clusters'],
+        layers: ['unclustered-hotspot-points', 'hotspot-clusters', 'asmc-dispersion-fill'],
       });
       if (features.length > 0) return;
 
@@ -169,13 +205,13 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   // Update Hotspots Layer on map
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !mapLoaded || !hotspotsData) return;
+    if (!map || !mapLoaded || !effectiveHotspotsData) return;
 
     // Add GeoJSON source with clustering if not present
     if (!map.getSource('hotspots-source')) {
       map.addSource('hotspots-source', {
         type: 'geojson',
-        data: hotspotsData as GeoJSON.GeoJSON,
+        data: effectiveHotspotsData as GeoJSON.GeoJSON,
         cluster: true,
         clusterMaxZoom: 10,
         clusterRadius: 50,
@@ -336,7 +372,9 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       });
     } else {
       const source = map.getSource('hotspots-source') as maplibregl.GeoJSONSource;
-      source.setData(hotspotsData as GeoJSON.GeoJSON);
+      if (source) {
+        source.setData(effectiveHotspotsData as GeoJSON.GeoJSON);
+      }
     }
 
     // Toggle layer visibility
@@ -346,7 +384,117 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       map.setLayoutProperty('hotspot-cluster-count', 'visibility', visibility);
       map.setLayoutProperty('unclustered-hotspot-points', 'visibility', visibility);
     }
-  }, [mapLoaded, hotspotsData, layers.hotspots]);
+  }, [mapLoaded, effectiveHotspotsData, layers.hotspots]);
+
+  // Update ASEAN ASMC Smoke Dispersion Layer on map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !mapLoaded || !dispersionData) return;
+
+    if (!map.getSource('asmc-dispersion-source')) {
+      // Place dispersion polygons underneath hotspots if hotspot clusters exist
+      const beforeId = map.getLayer('hotspot-clusters') ? 'hotspot-clusters' : undefined;
+
+      map.addSource('asmc-dispersion-source', {
+        type: 'geojson',
+        data: dispersionData as unknown as GeoJSON.GeoJSON,
+      });
+
+      map.addLayer(
+        {
+          id: 'asmc-dispersion-fill',
+          type: 'fill',
+          source: 'asmc-dispersion-source',
+          paint: {
+            'fill-color': [
+              'match',
+              ['get', 'intensity'],
+              'dense',
+              '#9333ea', // Deep purple
+              'moderate',
+              '#a855f7', // Purple
+              '#c084fc', // Light purple
+            ],
+            'fill-opacity': 0.35,
+          },
+        },
+        beforeId
+      );
+
+      map.addLayer(
+        {
+          id: 'asmc-dispersion-outline',
+          type: 'line',
+          source: 'asmc-dispersion-source',
+          paint: {
+            'line-color': '#c084fc',
+            'line-width': 1.8,
+            'line-dasharray': [2, 2],
+          },
+        },
+        beforeId
+      );
+
+      // Click on smoke dispersion plume -> show ASMC metadata
+      map.on('click', 'asmc-dispersion-fill', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feat = e.features[0];
+        const props = feat.properties as unknown as DispersionFeatureProperties;
+
+        const popupContent = document.createElement('div');
+        popupContent.className = 'text-xs space-y-1.5 p-1 text-slate-200';
+        popupContent.innerHTML = `
+          <div class="flex items-center justify-between border-b border-white/10 pb-1">
+            <span class="font-bold text-purple-400 flex items-center gap-1">
+              💨 ASMC Smoke Dispersion Plume
+            </span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded font-mono uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              ${props.intensity || 'Active'}
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
+            <div><span class="text-slate-400">Plume ID:</span> <strong class="text-white">${props.plumeId}</strong></div>
+            <div><span class="text-slate-400">Region:</span> <strong class="text-white">${props.sourceRegion}</strong></div>
+            <div><span class="text-slate-400">Est. Density:</span> <strong class="text-purple-300">${props.densityUgM3} µg/m³</strong></div>
+            <div><span class="text-slate-400">Confidence:</span> <strong class="text-white">${props.confidence}</strong></div>
+          </div>
+          <div class="text-[9px] text-slate-400 bg-slate-900/60 p-1.5 rounded border border-white/5 leading-snug">
+            <em>ASEAN Specialised Meteorological Centre (ASMC) regional transboundary smoke trajectory simulation.</em>
+          </div>
+        `;
+
+        if (activePopupRef.current) {
+          activePopupRef.current.remove();
+        }
+
+        const newPopup = new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
+          .setLngLat(e.lngLat)
+          .setDOMContent(popupContent)
+          .addTo(map);
+
+        activePopupRef.current = newPopup;
+      });
+
+      map.on('mouseenter', 'asmc-dispersion-fill', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'asmc-dispersion-fill', () => {
+        map.getCanvas().style.cursor = '';
+      });
+    } else {
+      const source = map.getSource('asmc-dispersion-source') as maplibregl.GeoJSONSource;
+      if (source) {
+        source.setData(dispersionData as unknown as GeoJSON.GeoJSON);
+      }
+    }
+
+    // Toggle layer visibility
+    const visibility = layers.dispersion ? 'visible' : 'none';
+    if (map.getLayer('asmc-dispersion-fill')) {
+      map.setLayoutProperty('asmc-dispersion-fill', 'visibility', visibility);
+      map.setLayoutProperty('asmc-dispersion-outline', 'visibility', visibility);
+    }
+  }, [mapLoaded, dispersionData, layers.dispersion]);
 
   // Toggle Wind Layer animation
   useEffect(() => {

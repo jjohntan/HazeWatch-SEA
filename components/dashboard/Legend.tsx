@@ -72,6 +72,16 @@ export const Legend: React.FC = () => {
               Particle vectors represent 10m surface winds. Particles stream in the downwind direction with velocity proportional to speed.
             </p>
           </div>
+
+          <div className="border-t border-white/5 pt-2">
+            <div className="font-semibold text-slate-300 mb-1 flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm bg-purple-500/80 border border-purple-400" />
+              <span>ASMC Smoke Dispersion</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-snug">
+              Transboundary smoke haze boundary model from ASEAN Specialised Meteorological Centre (ASMC) tracking regional peat and forest fire plume dispersion.
+            </p>
+          </div>
         </div>
       )}
     </div>
