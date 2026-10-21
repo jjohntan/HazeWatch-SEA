@@ -11,17 +11,19 @@ export const Legend: React.FC = () => {
     <div className="glass-panel rounded-xl shadow-2xl border border-white/10 text-slate-200 overflow-hidden w-64 md:w-72 transition-all">
       {/* Header with expand/collapse */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold tracking-wide bg-slate-900/60 hover:bg-slate-800/60 transition-colors border-b border-white/5"
+        type="button"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold tracking-wide bg-slate-900/90 hover:bg-slate-800 text-slate-200 transition-colors border-b border-white/10 cursor-pointer select-none"
+        aria-expanded={isExpanded}
       >
-        <span className="flex items-center gap-1.5 text-cyan-400">
+        <span className="flex items-center gap-1.5 text-cyan-400 font-medium">
           <Eye className="w-3.5 h-3.5" />
           Map Legend & Standards
         </span>
         {isExpanded ? (
           <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
         ) : (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
         )}
       </button>
 

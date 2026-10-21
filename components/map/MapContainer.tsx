@@ -213,7 +213,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         filter: ['has', 'point_count'],
         layout: {
           'text-field': '{point_count_abbreviated}',
-          'text-font': ['Open Sans Bold'],
+          'text-font': ['Montserrat Regular Italic', 'Open Sans Italic', 'Noto Sans Regular'],
           'text-size': 12,
         },
         paint: {
@@ -422,8 +422,8 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         />
       </div>
 
-      {/* Floating Legend (Bottom Left) */}
-      <div className="absolute bottom-20 left-4 z-20 hidden sm:block">
+      {/* Floating Legend (Bottom Left - above timeline) */}
+      <div className="absolute bottom-28 left-4 z-30 hidden sm:block">
         <Legend />
       </div>
 

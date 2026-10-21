@@ -94,12 +94,19 @@ export async function GET(request: NextRequest) {
     const csvText = await response.text();
     const parsedGeoJson = parseFirmsCsvToGeoJson(csvText, false);
 
-    // Filter by confidence if specified
+    // Filter by confidence (default to nominal & high to filter out thermal noise)
     let features = parsedGeoJson.features;
     if (confidenceFilter === 'high') {
       features = features.filter((f) => f.properties.confidence === 'high');
-    } else if (confidenceFilter === 'nominal') {
-      features = features.filter((f) => f.properties.confidence === 'nominal' || f.properties.confidence === 'high');
+    } else {
+      // Exclude low-confidence noise by default unless explicitly asked
+      features = features.filter((f) => f.properties.confidence !== 'low');
+    }
+
+    // Sort by Fire Radiative Power (descending) and cap to top 2500 points to prevent WebGL GPU memory overload
+    features.sort((a, b) => b.properties.frp - a.properties.frp);
+    if (features.length > 2500) {
+      features = features.slice(0, 2500);
     }
 
     const payload: CachedHotspotsPayload = {
