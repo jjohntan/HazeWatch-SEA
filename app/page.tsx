@@ -152,19 +152,37 @@ export default function Home() {
 
         {/* Mobile Environmental Panel Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute inset-0 z-30 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="w-5/6 max-w-sm h-full bg-slate-950">
-              <Sidebar
-                currentLocation={currentLocation}
-                airQuality={airQuality}
-                forecast={forecast}
-                selectedHourOffset={selectedHourOffset}
-                onSelectHour={setSelectedHourOffset}
-                isLoading={isLoading}
-                error={error}
-                onRefresh={refetch}
-                hotspotsData={hotspotsData}
-              />
+          <div 
+            className="md:hidden absolute inset-0 z-50 bg-black/70 backdrop-blur-sm animate-fade-in flex"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <div 
+              className="w-5/6 max-w-sm h-full bg-slate-950 shadow-2xl relative flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-3 border-b border-white/10 bg-slate-900/90">
+                <span className="text-xs font-bold text-white tracking-wide uppercase">Environmental Intelligence</span>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                  title="Close panel"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <Sidebar
+                  currentLocation={currentLocation}
+                  airQuality={airQuality}
+                  forecast={forecast}
+                  selectedHourOffset={selectedHourOffset}
+                  onSelectHour={setSelectedHourOffset}
+                  isLoading={isLoading}
+                  error={error}
+                  onRefresh={refetch}
+                  hotspotsData={hotspotsData}
+                />
+              </div>
             </div>
           </div>
         )}
