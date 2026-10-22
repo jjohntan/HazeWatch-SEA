@@ -15,8 +15,10 @@ import {
 import { LocationCoords, CurrentAirQuality, HourlyForecastItem } from '@/types';
 import { formatMalaysiaTime, getAqiCategory } from '@/lib/geo/aqi';
 import { ForecastChart } from '@/components/charts/ForecastChart';
+import { GefsOutlookFanChart } from '@/components/charts/GefsOutlookFanChart';
 import { EnvironmentalIntelligenceCards } from './EnvironmentalIntelligenceCards';
 import { HotspotGeoJSON } from '@/lib/geo/hotspots';
+import { TomorrowOutlookData } from '@/lib/geo/gefs-ensemble';
 
 interface SidebarProps {
   currentLocation: LocationCoords;
@@ -54,6 +56,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const displayPm10 = activeData ? activeData.pm10 : (airQuality?.pm10 ?? null);
   const displayWindSpeed = activeData?.windSpeed10m ?? airQuality?.windSpeed10m ?? null;
   const displayWindDir = activeData?.windDirection10m ?? airQuality?.windDirection10m ?? null;
+
+  // Tomorrow's Outlook: 31 NOAA GEFS Ensemble Fan & Forecast PSI Range (Item 4)
+  const [outlookData, setOutlookData] = React.useState<TomorrowOutlookData | null>(null);
+  const [outlookLoading, setOutlookLoading] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    let isCancelled = false;
+    async function fetchOutlook() {
+      setOutlookLoading(true);
+      try {
+        const url = `/api/outlook?location=${encodeURIComponent(currentLocation.name)}&aqi=${displayAqi || 75}&pm25=${displayPm25 || 24.5}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (!isCancelled && json.outlook) {
+            setOutlookData(json.outlook);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch GEFS ensemble outlook:', err);
+      } finally {
+        if (!isCancelled) setOutlookLoading(false);
+      }
+    }
+
+    fetchOutlook();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentLocation.name, displayAqi, displayPm25]);
 
   return (
     <aside
@@ -253,6 +286,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           hourly={forecast}
           selectedHourOffset={selectedHourOffset}
           onSelectHour={onSelectHour}
+        />
+      </div>
+
+      {/* Tomorrow's Outlook: 31 NOAA GEFS Ensemble Fan & Forecast PSI Range (Item 4) */}
+      <div className="mb-3">
+        <GefsOutlookFanChart
+          outlook={outlookData}
+          isLoading={outlookLoading}
         />
       </div>
 
