@@ -13,6 +13,8 @@ interface HeaderProps {
   mobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
   onOpenInfo: () => void;
+  isHistoricalReplay?: boolean;
+  onToggleHistoricalReplay?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   mobileMenuOpen,
   onToggleMobileMenu,
   onOpenInfo,
+  isHistoricalReplay = false,
+  onToggleHistoricalReplay,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 py-2.5 flex items-center justify-between shadow-xl">
@@ -108,6 +112,19 @@ export const Header: React.FC<HeaderProps> = ({
           <Clock className="w-3.5 h-3.5 text-cyan-400" />
           <span>UTC+8 (MYT)</span>
         </div>
+
+        <button
+          onClick={onToggleHistoricalReplay}
+          className={`flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
+            isHistoricalReplay
+              ? 'bg-amber-500/30 text-amber-200 border-amber-500/60 shadow-md shadow-amber-500/20'
+              : 'bg-slate-800/60 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border-white/10'
+          }`}
+          title="Replay every satellite fire detection since 1 August day-by-day"
+        >
+          <Flame className={`w-3.5 h-3.5 ${isHistoricalReplay ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
+          <span className="hidden sm:inline font-medium">Fire Replay (1 Aug - Now)</span>
+        </button>
 
         <button
           onClick={onOpenInfo}

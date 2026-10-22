@@ -5,11 +5,13 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/dashboard/Header';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { TimelineSlider } from '@/components/dashboard/TimelineSlider';
+import { HistoricalReplayControls } from '@/components/dashboard/HistoricalReplayControls';
 import { InfoModal } from '@/components/dashboard/InfoModal';
 import { LOCATION_PRESETS } from '@/lib/constants';
 import { LocationCoords, MapLayerState } from '@/types';
 import { useAirQuality } from '@/hooks/useAirQuality';
 import { HotspotGeoJSON } from '@/lib/geo/hotspots';
+import { DailyHotspotSummary } from '@/lib/geo/historical-hotspots';
 
 // Dynamically load MapLibre MapContainer with SSR disabled
 const MapContainer = dynamic(
@@ -49,15 +51,53 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [hotspotsData, setHotspotsData] = useState<HotspotGeoJSON | null>(null);
 
-  // Fetch hotspots data for intelligence analysis and geospatial mapping
+  // Historical Daily Fire Replay state (Since 1 Aug)
+  const [isHistoricalReplay, setIsHistoricalReplay] = useState<boolean>(false);
+  const [historicalDates] = useState<string[]>(() => {
+    // Generate dates from 2026-08-01 through 2026-10-22
+    const dates: string[] = [];
+    const curr = new Date('2026-08-01');
+    const end = new Date('2026-10-22');
+    while (curr <= end) {
+      dates.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+    return dates;
+  });
+  // Default to 8 Oct peak index if available, else latest date
+  const [historicalDateIndex, setHistoricalDateIndex] = useState<number>(() => {
+    const oct8 = '2026-10-08';
+    const dates = [];
+    const curr = new Date('2026-08-01');
+    const end = new Date('2026-10-22');
+    while (curr <= end) {
+      dates.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+    const idx = dates.indexOf(oct8);
+    return idx !== -1 ? idx : dates.length - 1;
+  });
+  const [isReplayingHistory, setIsReplayingHistory] = useState<boolean>(false);
+  const [historicalSummary, setHistoricalSummary] = useState<DailyHotspotSummary | null>(null);
+
+  // Fetch hotspots data (Live or Historical Daily Replay)
   useEffect(() => {
+    let isCancelled = false;
+
     async function fetchHotspots() {
       try {
-        const res = await fetch('/api/hotspots');
+        const url = isHistoricalReplay && historicalDates[historicalDateIndex]
+          ? `/api/hotspots?date=${historicalDates[historicalDateIndex]}`
+          : '/api/hotspots';
+
+        const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();
-          if (json.geojson) {
+          if (!isCancelled && json.geojson) {
             setHotspotsData(json.geojson);
+            if (json.summary) {
+              setHistoricalSummary(json.summary);
+            }
           }
         }
       } catch (err) {
@@ -66,18 +106,33 @@ export default function Home() {
     }
 
     fetchHotspots();
-  }, []);
 
-  // Auto-play timeline progression
+    return () => {
+      isCancelled = true;
+    };
+  }, [isHistoricalReplay, historicalDateIndex, historicalDates]);
+
+  // Auto-play historical date progression
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isPlaying) {
+    if (isHistoricalReplay && isReplayingHistory) {
+      interval = setInterval(() => {
+        setHistoricalDateIndex((prev) => (prev >= historicalDates.length - 1 ? 0 : prev + 1));
+      }, 1400);
+    }
+    return () => clearInterval(interval);
+  }, [isHistoricalReplay, isReplayingHistory, historicalDates.length]);
+
+  // Auto-play timeline progression for forecast
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (!isHistoricalReplay && isPlaying) {
       interval = setInterval(() => {
         setSelectedHourOffset((prev) => (prev >= 48 ? 0 : prev + 1));
       }, 1200);
     }
     return () => clearInterval(interval);
-  }, [isPlaying]);
+  }, [isHistoricalReplay, isPlaying]);
 
   const handleToggleLayer = (layer: keyof MapLayerState) => {
     setLayers((prev) => ({
@@ -131,6 +186,16 @@ export default function Home() {
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onOpenInfo={() => setInfoModalOpen(true)}
+        isHistoricalReplay={isHistoricalReplay}
+        onToggleHistoricalReplay={() => {
+          setIsHistoricalReplay(!isHistoricalReplay);
+          setIsPlaying(false);
+          setIsReplayingHistory(false);
+          // If turning on replay, ensure hotspots layer is visible
+          if (!isHistoricalReplay) {
+            setLayers((prev) => ({ ...prev, hotspots: true }));
+          }
+        }}
       />
 
       {/* Main Map-First Workspace */}
@@ -198,15 +263,30 @@ export default function Home() {
             hotspotsData={hotspotsData}
           />
 
-          {/* Bottom Floating Timeline Controls */}
+          {/* Bottom Floating Timeline or Historical Replay Controls */}
           <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-auto">
-            <TimelineSlider
-              selectedHourOffset={selectedHourOffset}
-              onHourChange={setSelectedHourOffset}
-              hourlyData={forecast}
-              isPlaying={isPlaying}
-              onTogglePlay={() => setIsPlaying(!isPlaying)}
-            />
+            {isHistoricalReplay ? (
+              <HistoricalReplayControls
+                dates={historicalDates}
+                currentIndex={historicalDateIndex}
+                onSelectDateIndex={setHistoricalDateIndex}
+                isPlaying={isReplayingHistory}
+                onTogglePlay={() => setIsReplayingHistory(!isReplayingHistory)}
+                summary={historicalSummary}
+                onCloseReplay={() => {
+                  setIsHistoricalReplay(false);
+                  setIsReplayingHistory(false);
+                }}
+              />
+            ) : (
+              <TimelineSlider
+                selectedHourOffset={selectedHourOffset}
+                onHourChange={setSelectedHourOffset}
+                hourlyData={forecast}
+                isPlaying={isPlaying}
+                onTogglePlay={() => setIsPlaying(!isPlaying)}
+              />
+            )}
           </div>
         </div>
       </div>

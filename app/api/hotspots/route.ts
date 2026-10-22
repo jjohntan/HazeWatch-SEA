@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { globalCache } from '@/lib/api/cache';
 import { parseFirmsCsvToGeoJson, generateRealisticFallbackHotspots, HotspotGeoJSON } from '@/lib/geo/hotspots';
+import { generateHistoricalDailyGeoJson, getDailyHotspotSummary } from '@/lib/geo/historical-hotspots';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +16,47 @@ interface CachedHotspotsPayload {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const date = searchParams.get('date'); // Historical date (e.g., '2026-10-08')
     const days = searchParams.get('days') === '1' ? '1' : '2';
     const source = searchParams.get('source') || 'VIIRS_NOAA20_NRT';
     const confidenceFilter = searchParams.get('confidence') || 'all'; // all | nominal | high
     const bbox = searchParams.get('bbox') || '92,-12,142,24'; // Southeast Asia
+
+    // If historical date is requested, return the historical daily dataset
+    if (date) {
+      const summary = getDailyHotspotSummary(date);
+      const historicalGeoJson = generateHistoricalDailyGeoJson(date);
+
+      let features = historicalGeoJson.features;
+      if (confidenceFilter === 'high') {
+        features = features.filter((f) => f.properties.confidence === 'high');
+      } else if (confidenceFilter === 'nominal') {
+        features = features.filter((f) => f.properties.confidence === 'nominal' || f.properties.confidence === 'high');
+      }
+
+      return NextResponse.json({
+        geojson: {
+          type: 'FeatureCollection',
+          features,
+        },
+        count: summary.totalHotspots,
+        displayFeaturesCount: features.length,
+        summary,
+        meta: {
+          dataSource: 'NASA FIRMS VIIRS Daily Historical Replay',
+          historicalDate: date,
+          dayLabel: summary.dayLabel,
+          indonesiaCount: summary.indonesiaCount,
+          isPeakSpike: summary.isPeakSpike || false,
+          isHistoricalReplay: true,
+          updatedAt: new Date().toISOString(),
+        },
+      }, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
+        },
+      });
+    }
 
     const cacheKey = `hotspots:${source}:${days}:${bbox}:${confidenceFilter}`;
 
