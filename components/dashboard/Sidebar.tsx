@@ -237,7 +237,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Public Health Guidance & Haze Source Intelligence */}
+      {/* Haze Source Intelligence & 5-Day Trajectory Origin */}
       <EnvironmentalIntelligenceCards
         currentLocation={currentLocation}
         displayAqi={displayAqi}
