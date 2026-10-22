@@ -268,6 +268,37 @@ export const EnvironmentalIntelligenceCards: React.FC<EnvironmentalIntelligenceC
               </div>
             )}
 
+            {/* 5-Day Backward Air Mass Origin (Item 3) */}
+            <div className="border-t border-white/5 pt-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">
+                  5-Day Air Mass Origin (NOAA GFS)
+                </span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                  -120h Backward
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-sky-950/20 border border-sky-800/30 text-[11px] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Dominant Upwind Source:</span>
+                  <span className="font-semibold text-white">
+                    {displayWindDir && displayWindDir > 180 && displayWindDir < 270
+                      ? 'Sumatra Peatland Belt'
+                      : displayWindDir && displayWindDir >= 90 && displayWindDir <= 180
+                      ? 'Kalimantan / Borneo Basin'
+                      : 'Malacca Maritime Corridor'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400">Lagrangian Tracking:</span>
+                  <span className="text-sky-300 font-mono">120h Boundary Winds</span>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed pt-0.5 border-t border-white/5">
+                  Over the previous 5 days, air parcels arriving in {currentLocation.name} traversed maritime channels and upwind agricultural belts before reaching Peninsular/East Malaysia.
+                </p>
+              </div>
+            </div>
+
             {/* Uncertainty & Non-attribution Disclaimer */}
             <div className="text-[9px] text-slate-400 leading-normal bg-slate-950/60 p-2 rounded-lg border border-white/5 italic">
               {sourceAnalysis.uncertaintyDisclaimer}

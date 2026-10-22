@@ -72,6 +72,7 @@ export interface MapLayerState {
   hotspots: boolean;
   wind: boolean;
   dispersion: boolean;
+  trajectory: boolean;
 }
 
 export interface HotspotFilterState {

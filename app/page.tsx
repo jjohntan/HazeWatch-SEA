@@ -44,6 +44,7 @@ export default function Home() {
     hotspots: true,
     wind: true,
     dispersion: false,
+    trajectory: true,
   });
 
   // Timeline state

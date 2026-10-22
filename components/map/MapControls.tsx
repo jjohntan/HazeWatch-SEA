@@ -94,6 +94,23 @@ export const MapControls: React.FC<MapControlsProps> = ({
             </span>
             <span className="text-[10px] font-mono">{layers.dispersion ? 'ON' : 'OFF'}</span>
           </button>
+
+          {/* 5-Day Backward Air Trajectory */}
+          <button
+            onClick={() => onToggleLayer('trajectory')}
+            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              layers.trajectory
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+                : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/70 border border-transparent'
+            }`}
+            title="Where Malaysia's air mass had been over previous 5 days (NOAA GFS)"
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping-slow" />
+              5-Day Air Trajectory
+            </span>
+            <span className="text-[10px] font-mono">{layers.trajectory ? 'ON' : 'OFF'}</span>
+          </button>
         </div>
       </div>
 

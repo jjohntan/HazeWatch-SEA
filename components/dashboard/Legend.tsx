@@ -75,11 +75,11 @@ export const Legend: React.FC = () => {
 
           <div className="border-t border-white/5 pt-2">
             <div className="font-semibold text-slate-300 mb-1 flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-purple-500/80 border border-purple-400" />
-              <span>ASMC Smoke Dispersion</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 border border-white" />
+              <span>5-Day Air Trajectory (NOAA GFS)</span>
             </div>
             <p className="text-[10px] text-slate-400 leading-snug">
-              Transboundary smoke haze boundary model from ASEAN Specialised Meteorological Centre (ASMC) tracking regional peat and forest fire plume dispersion.
+              Kinematic backward particle model tracking where Malaysia&apos;s incoming air mass had been over the previous 120 hours.
             </p>
           </div>
         </div>

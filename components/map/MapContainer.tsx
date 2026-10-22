@@ -40,6 +40,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
   const [internalHotspotsData, setInternalHotspotsData] = useState<HotspotGeoJSON | null>(null);
   const [dispersionData, setDispersionData] = useState<AsmcDispersionGeoJSON | null>(null);
+  const [trajectoryData, setTrajectoryData] = useState<GeoJSON.GeoJSON | null>(null);
 
   const effectiveHotspotsData = externalHotspotsData ?? internalHotspotsData;
 
@@ -109,6 +110,34 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       isMounted = false;
     };
   }, [selectedHourOffset]);
+
+  // Fetch 5-Day Backward Air Trajectory for active location (Item 3)
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchTrajectory() {
+      try {
+        const res = await fetch(
+          `/api/trajectory?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}&name=${encodeURIComponent(
+            currentLocation.name
+          )}`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          if (isMounted && json.geojson) {
+            setTrajectoryData(json.geojson);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load backward trajectory data:', err);
+      }
+    }
+
+    fetchTrajectory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentLocation.latitude, currentLocation.longitude, currentLocation.name]);
 
   // Initialize MapLibre GL JS
   useEffect(() => {
@@ -495,6 +524,138 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       map.setLayoutProperty('asmc-dispersion-outline', 'visibility', visibility);
     }
   }, [mapLoaded, dispersionData, layers.dispersion]);
+
+  // Update 5-Day Backward Air Parcel Trajectory Layer on Map (Item 3)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !mapLoaded || !trajectoryData) return;
+
+    if (!map.getSource('trajectory-source')) {
+      map.addSource('trajectory-source', {
+        type: 'geojson',
+        data: trajectoryData,
+      });
+
+      // 1. Animated / Glow Trajectory Ribbon (LineString)
+      map.addLayer({
+        id: 'trajectory-line-glow',
+        type: 'line',
+        source: 'trajectory-source',
+        filter: ['==', '$type', 'LineString'],
+        paint: {
+          'line-color': '#0284c7', // Sky blue
+          'line-width': 6,
+          'line-opacity': 0.4,
+          'line-blur': 3,
+        },
+      });
+
+      map.addLayer({
+        id: 'trajectory-line',
+        type: 'line',
+        source: 'trajectory-source',
+        filter: ['==', '$type', 'LineString'],
+        paint: {
+          'line-color': '#38bdf8', // Bright cyan-sky
+          'line-width': 2.8,
+          'line-dasharray': [3, 1.5],
+        },
+      });
+
+      // 2. Trajectory Waypoints (3-hourly nodes tracking backward position)
+      map.addLayer({
+        id: 'trajectory-waypoints',
+        type: 'circle',
+        source: 'trajectory-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-color': [
+            'case',
+            ['get', 'isArrival'],
+            '#10b981', // Arrival in Malaysia (Emerald)
+            ['get', 'isOrigin'],
+            '#f43f5e', // 5-day origin (Rose red)
+            '#38bdf8', // Intermediate waypoints (Cyan)
+          ],
+          'circle-radius': [
+            'case',
+            ['get', 'isArrival'],
+            7,
+            ['get', 'isOrigin'],
+            7,
+            3.5,
+          ],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#ffffff',
+          'circle-opacity': 0.95,
+        },
+      });
+
+      // Click waypoint -> show trajectory telemetry popup
+      map.on('click', 'trajectory-waypoints', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feat = e.features[0];
+        const props = (feat.properties || {}) as Record<string, unknown>;
+        const coords = (feat.geometry as GeoJSON.Point).coordinates as [number, number];
+
+        const popupContent = document.createElement('div');
+        popupContent.className = 'text-xs space-y-1.5 p-1 text-slate-200';
+        popupContent.innerHTML = `
+          <div class="flex items-center justify-between border-b border-white/10 pb-1">
+            <span class="font-bold text-sky-400 flex items-center gap-1">
+              📍 Air Mass Waypoint
+            </span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded font-mono ${
+              props.isArrival ? 'bg-emerald-500/20 text-emerald-300' : props.isOrigin ? 'bg-rose-500/20 text-rose-300' : 'bg-sky-500/20 text-sky-300'
+            }">
+              ${props.hoursAgo === 0 ? 'CURRENT ARRIVAL' : `-${props.hoursAgo}h AGO`}
+            </span>
+          </div>
+          <div class="text-[11px] pt-1 space-y-1">
+            <div><span class="text-slate-400">Sector:</span> <strong class="text-white">${props.sector}</strong></div>
+            <div class="grid grid-cols-2 gap-1 text-[10px]">
+              <div><span class="text-slate-400">Wind:</span> <strong class="text-sky-300">${props.speedKmh} km/h (${props.directionDeg}°)</strong></div>
+              <div><span class="text-slate-400">Altitude:</span> <strong class="text-slate-200">~${props.altitudeMeters}m</strong></div>
+            </div>
+          </div>
+          <div class="text-[9px] text-slate-400 bg-slate-900/60 p-1.5 rounded border border-white/5 leading-snug">
+            <em>NOAA GFS kinematic backward parcel simulation: where air arriving in Malaysia was located ${props.hoursAgo} hours prior.</em>
+          </div>
+        `;
+
+        if (activePopupRef.current) {
+          activePopupRef.current.remove();
+        }
+
+        const newPopup = new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
+          .setLngLat(coords)
+          .setDOMContent(popupContent)
+          .addTo(map);
+
+        activePopupRef.current = newPopup;
+      });
+
+      map.on('mouseenter', 'trajectory-waypoints', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'trajectory-waypoints', () => {
+        map.getCanvas().style.cursor = '';
+      });
+    } else {
+      const source = map.getSource('trajectory-source') as maplibregl.GeoJSONSource;
+      if (source) {
+        source.setData(trajectoryData);
+      }
+    }
+
+    // Toggle trajectory layer visibility
+    const trajVis = layers.trajectory ? 'visible' : 'none';
+    if (map.getLayer('trajectory-line')) {
+      map.setLayoutProperty('trajectory-line-glow', 'visibility', trajVis);
+      map.setLayoutProperty('trajectory-line', 'visibility', trajVis);
+      map.setLayoutProperty('trajectory-waypoints', 'visibility', trajVis);
+    }
+  }, [mapLoaded, trajectoryData, layers.trajectory]);
 
   // Toggle Wind Layer animation
   useEffect(() => {
